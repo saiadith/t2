@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: ecommerce-analytics-dashboard
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python deploy_railway.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.0
+      - key: PORT
+        value: 8501
+      - key: DB_HOST
+        fromDatabase:
+          name: ecommerce-analytics-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: ecommerce-analytics-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: ecommerce-analytics-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: ecommerce-analytics-db
+          property: user
+      - key: DB_PASS
+        fromDatabase:
+          name: ecommerce-analytics-db
+          property: password
+
+databases:
+  - name: ecommerce-analytics-db
+    databaseName: customer_events
+    user: postgres 

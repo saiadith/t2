@@ -1,0 +1,30 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "docker/Dockerfile.dashboard"
+
+[deploy]
+startCommand = "streamlit run dashboard/app_live.py --server.port=$PORT --server.address=0.0.0.0"
+healthcheckPath = "/"
+healthcheckTimeout = 100
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+[[services]]
+name = "dashboard"
+build = { builder = "DOCKERFILE", dockerfilePath = "docker/Dockerfile.dashboard" }
+deploy = { startCommand = "streamlit run dashboard/app_live.py --server.port=$PORT --server.address=0.0.0.0" }
+
+[[services]]
+name = "websocket-server"
+build = { builder = "DOCKERFILE", dockerfilePath = "docker/Dockerfile.server" }
+deploy = { startCommand = "python streaming/server.py" }
+
+[[services]]
+name = "event-simulator"
+build = { builder = "DOCKERFILE", dockerfilePath = "docker/Dockerfile.simulator" }
+deploy = { startCommand = "python streaming/event_simulator.py" }
+
+[[services]]
+name = "database"
+build = { builder = "DOCKERFILE", dockerfilePath = "docker/Dockerfile.init" }
+deploy = { startCommand = "python db/init_postgres.py && python db/generate_customers.py" } 
