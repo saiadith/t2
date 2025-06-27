@@ -1,0 +1,125 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:13
+    container_name: customer_events_db
+    environment:
+      POSTGRES_DB: customer_events
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Rp123456
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../db/init_postgres.sql:/docker-entrypoint-initdb.d/init_postgres.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d customer_events"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - customer_analytics_network
+
+  # WebSocket Server
+  websocket_server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.server
+    container_name: websocket_server
+    ports:
+      - "8765:8765"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=customer_events
+      - DB_USER=postgres
+      - DB_PASS=Rp123456
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - customer_analytics_network
+    restart: unless-stopped
+
+  # Event Simulator
+  event_simulator:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.simulator
+    container_name: event_simulator
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=customer_events
+      - DB_USER=postgres
+      - DB_PASS=Rp123456
+      - WS_URL=ws://websocket_server:8765
+    depends_on:
+      postgres:
+        condition: service_healthy
+      websocket_server:
+        condition: service_started
+    networks:
+      - customer_analytics_network
+    restart: unless-stopped
+
+  # Streamlit Dashboard
+  dashboard:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dashboard
+    container_name: streamlit_dashboard
+    ports:
+      - "8501:8501"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=customer_events
+      - DB_USER=postgres
+      - DB_PASS=Rp123456
+    depends_on:
+      postgres:
+        condition: service_healthy
+      websocket_server:
+        condition: service_started
+    networks:
+      - customer_analytics_network
+    restart: unless-stopped
+
+  # Database Initialization Service
+  db_init:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.init
+    container_name: db_init
+    command: >
+      sh -c "
+        echo 'Waiting for PostgreSQL to be ready...' &&
+        while ! pg_isready -h postgres -p 5432 -U postgres; do
+          sleep 2;
+        done &&
+        echo 'PostgreSQL is ready!' &&
+        python db/init_postgres.py &&
+        python db/generate_customers.py &&
+        echo 'Database initialization complete!'
+      "
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=customer_events
+      - DB_USER=postgres
+      - DB_PASS=Rp123456
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - customer_analytics_network
+
+volumes:
+  postgres_data:
+
+networks:
+  customer_analytics_network:
+    driver: bridge
