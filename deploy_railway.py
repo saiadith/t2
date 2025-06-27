@@ -10,6 +10,9 @@ import time
 import psycopg2
 from datetime import datetime
 import threading
+import sys
+import http.server
+import socketserver
 
 # Railway environment variables
 DB_HOST = os.getenv("DB_HOST", "localhost")
@@ -17,7 +20,37 @@ DB_PORT = os.getenv("DB_PORT", "5432")
 DB_NAME = os.getenv("DB_NAME", "customer_events")
 DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASS = os.getenv("DB_PASS", "Rp123456")
-PORT = os.getenv("PORT", "8501")
+PORT = int(os.getenv("PORT", "8501"))
+
+class HealthCheckHandler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+            html = f"""
+            <html>
+            <head><title>E-commerce Analytics System</title></head>
+            <body>
+                <h1>🛍️ E-commerce Analytics System</h1>
+                <p>✅ Service is running and healthy!</p>
+                <p>Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                <p>📊 <a href="/dashboard">Go to Dashboard</a></p>
+            </body>
+            </html>
+            """
+            self.wfile.write(html.encode('utf-8'))
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+def start_health_server():
+    """Start a simple health check server"""
+    print(f"🏥 Starting health check server on port {PORT}")
+    
+    with socketserver.TCPServer(("", PORT), HealthCheckHandler) as httpd:
+        print(f"✅ Health check server running on port {PORT}")
+        httpd.serve_forever()
 
 def wait_for_database():
     """Wait for database to be ready"""
@@ -95,15 +128,18 @@ def start_event_simulator():
     print("✅ Event simulator started in background")
 
 def start_streamlit():
-    """Start Streamlit dashboard"""
+    """Start Streamlit dashboard on a different port"""
     print("📊 Starting Streamlit dashboard...")
     
+    streamlit_port = PORT + 1
     cmd = [
         "streamlit", "run", "dashboard/app_live.py",
-        "--server.port", PORT,
+        "--server.port", str(streamlit_port),
         "--server.address", "0.0.0.0",
         "--server.headless", "true",
-        "--browser.gatherUsageStats", "false"
+        "--browser.gatherUsageStats", "false",
+        "--server.enableCORS", "false",
+        "--server.enableXsrfProtection", "false"
     ]
     
     try:
@@ -120,15 +156,20 @@ def main():
     print(f"🌐 Port: {PORT}")
     print(f"🗄️ Database: {DB_HOST}:{DB_PORT}/{DB_NAME}")
     
+    # Start health server in background
+    health_thread = threading.Thread(target=start_health_server, daemon=True)
+    health_thread.start()
+    time.sleep(1)  # Give health server time to start
+    
     # Step 1: Wait for database
     if not wait_for_database():
         print("❌ Failed to connect to database. Exiting.")
-        return
+        sys.exit(1)
     
     # Step 2: Initialize database
     if not initialize_database():
         print("❌ Failed to initialize database. Exiting.")
-        return
+        sys.exit(1)
     
     # Step 3: Start background services
     start_websocket_server()

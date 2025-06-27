@@ -28,5 +28,5 @@ ENV PYTHONUNBUFFERED=1
 # Expose port (Railway will set the PORT environment variable)
 EXPOSE 8501
 
-# Use the Railway deployment script
-CMD ["python", "deploy_railway.py"] 
+# Use the Flask app for Railway deployment
+CMD ["python", "app.py"] 
